@@ -1,0 +1,7 @@
+# Arduino IDE skräpfiler
+/libraries/
+/build/
+换行
+# Operativsystemfiler
+.DS_Store
+Thumbs.db
