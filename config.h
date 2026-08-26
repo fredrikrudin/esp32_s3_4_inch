@@ -42,6 +42,16 @@ struct VictronDevice {
     int deviceType;     // 1 = Shunt, 2 = MPPT, 3 = IP22
 };
 
+struct VictronInverter {
+    DeviceConfig cfg;
+    String key;         // 32-teckens AES-krypteringsnyckel för växelriktaren
+    float battery_voltage;
+    float ac_voltage;   // Utgående AC-spänning (t.ex. 230V)
+    float ac_current;   // Utgående AC-ström
+    float ac_power;     // Utgående effekt i Watt (W)
+    int state;          // Status: 0=Av, 3=Invertering, 4=Eco-läge, 5=Fel
+};
+
 struct RuuviTagDevice {
     DeviceConfig cfg;
     float temperature;
@@ -83,7 +93,7 @@ struct ElegooRelaySystem {
 // ==========================================
 // 3. GLOBALA INSTANSER & SYSTEMVARIABLER
 // ==========================================
-extern VictronDevice shunt, mppt, ip22;
+extern VictronDevice shunt, mppt, ip22, inverter;
 extern RuuviTagDevice ruuvi;
 extern XiaomiMijiaDevice mijia;
 extern ShellyDevice shellyPro1, shellyPro2;
