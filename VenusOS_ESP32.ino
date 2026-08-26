@@ -8,13 +8,13 @@
 #include <Wire.h>
 #include <lvgl.h>
 #include "config.h"
-
 #include "storage_manager.h"
 #include "ui_manager.h"
 #include "backlight_manager.h"
 #include "elegoo_relay_manager.h"
 #include "network_manager.h"
 #include "ble_manager.h"
+#include "discovery_manager.h"
 
 VictronDevice shunt, mppt, ip22;
 EcoWorthyDevice ecoBatt;
