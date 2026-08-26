@@ -4,9 +4,11 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <lvgl.h>
-#include <time.h> 
+#include <time.h> // För inbyggda klockan och tidszoner
 
-// --- I2C Busskonfiguration ---
+// ==========================================
+// 1. I2C- BUSS & HÅRDVARUKONFIGURATION
+// ==========================================
 // Intern buss: Waveshare Touch, Skärm och Bakgrundsbelysning (TCA9554)
 #define INTERNAL_SDA 8
 #define INTERNAL_SCL 9
@@ -21,21 +23,23 @@ const uint8_t RELAY_I2C_ADDRESS = 0x20;
 const int RELAY_4CH_PINS[] = {0, 1, 2, 3};
 const int RELAY_8CH_PINS[] = {0, 1, 2, 3, 4, 5, 6, 7};
 
-// --- Datastrukturer för enheter & sensorer ---
+// ==========================================
+// 2. DATASTRUKTURER FÖR ENHETER & SENSORER
+// ==========================================
 struct DeviceConfig {
-    String mac_or_ip;  
-    String name;       
-    bool enabled;      
+    String mac_or_ip;  // MAC-adress för BLE, IP-adress för Shelly
+    String name;       // Anpassat namn valt av användaren
+    bool enabled;      // True = enheten skannas/används, False = avstängd
 };
 
 struct VictronDevice {
     DeviceConfig cfg;
-    String key;         
+    String key;         // 32-teckens AES-krypteringsnyckel
     float voltage;
     float current;
     float soc;
     float power;
-    int deviceType;     
+    int deviceType;     // 1 = Shunt, 2 = MPPT, 3 = IP22
 };
 
 struct RuuviTagDevice {
@@ -57,14 +61,14 @@ struct ShellyDevice {
     bool channel_states[2]; 
 };
 
-// Uppgraderad flexibel struktur för Tid- och Datumschemaläggning
+// Uppgraderad flexibel struktur för Tid- och Datumschemaläggning (Victron-stil)
 struct RelaySchedule {
-    int startHour;      // 0-23
-    int startMinute;    // 0-59
-    int endHour;        // 0-23
-    int endMinute;      // 0-59
-    bool days[7];       // [0]=Mån, [1]=Tis... [6]=Sön
-    bool isEnabled;     
+    int startHour;      // Starttimme (0-23)
+    int startMinute;    // Startminut (0-59)
+    int endHour;        // Stopptimme (0-23)
+    int endMinute;      // Stoppminut (0-59)
+    bool days[7];       // Måndag [0] till Söndag [6]. true = aktiv.
+    bool isEnabled;     // Är detta schema aktiverat?
 };
 
 struct ElegooRelaySystem {
@@ -72,11 +76,13 @@ struct ElegooRelaySystem {
     bool relay8_states[8];
     bool enabled_4ch; 
     bool enabled_8ch;
-    RelaySchedule schedule4[4]; 
-    RelaySchedule schedule8[8];
+    RelaySchedule schedule4[4]; // Direkt matchad mot dina kanaler
+    RelaySchedule schedule8[8]; // Direkt matchad mot dina kanaler
 };
 
-// Globala instanser och systemvariabler
+// ==========================================
+// 3. GLOBALA INSTANSER & SYSTEMVARIABLER
+// ==========================================
 extern VictronDevice shunt, mppt, ip22;
 extern RuuviTagDevice ruuvi;
 extern XiaomiMijiaDevice mijia;
@@ -87,12 +93,16 @@ extern String wifi_ssid, wifi_pass;
 extern int update_interval;
 extern int display_brightness;
 
-// FreeRTOS Delade resurser & Bussar
+// ==========================================
+// 4. FREERTOS DELADE RESURSER & BUSSAR
+// ==========================================
 extern SemaphoreHandle_t lvgl_mutex;
 extern TwoWire InternalI2C;
 extern TwoWire ExternalI2C;
 
-// Globala LVGL-objekt
+// ==========================================
+// 5. GLOBALA LVGL-OBJEKT
+// ==========================================
 extern lv_obj_t * main_keyboard;
 extern lv_obj_t * lbl_footer_clock;
 extern lv_obj_t * btn_hamburger;
