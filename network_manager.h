@@ -5,17 +5,17 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h> 
 #include <HTTPClient.h>
-#include <ArduinoJson.h> // Krävs för att packa upp JSON-scheman
+#include <ArduinoJson.h> 
 #include "config.h"
-#include "storage_manager.h" // Krävs för saveScheduleToNVS()
-#include "web_pages.h"       // Inkluderar den utbrutna HTML-strängen
+#include "storage_manager.h" 
+#include "web_pages.h"       
 
 AsyncWebServer server(80);
 bool isWebServerStarted = false;
 
 void handleJsonRequest(AsyncWebServerRequest *request) {
     String json = "{";
-    json += "\"system\":{\"brightness\":" + String(display_brightness) + "},";
+    json += "\"system\":{\"brightness\":" + String(display_brightness) + ",\"ui_style\":" + String(ui_style_version) + "},";
     json += "\"victron\":{";
     json += "\"shunt\":{\"name\":\"" + shunt.cfg.name + "\",\"v\":" + String(shunt.voltage) + ",\"a\":" + String(shunt.current) + ",\"soc\":" + String(shunt.soc) + ",\"p\":" + String(shunt.power) + ",\"en\":" + String(shunt.cfg.enabled) + "},";
     json += "\"mppt\":{\"name\":\"" + mppt.cfg.name + "\",\"v\":" + String(mppt.voltage) + ",\"a\":" + String(mppt.current) + ",\"soc\":" + String(mppt.soc) + ",\"p\":" + String(mppt.power) + ",\"en\":" + String(mppt.cfg.enabled) + "},";
@@ -26,8 +26,8 @@ void handleJsonRequest(AsyncWebServerRequest *request) {
     json += "\"xiaomi\":{\"name\":\"" + mijia.cfg.name + "\",\"t\":" + String(mijia.temperature) + ",\"h\":" + String(mijia.humidity) + ",\"bat\":" + String(mijia.battery_level) + ",\"en\":" + String(mijia.cfg.enabled) + "}";
     json += "},";
     json += "\"shelly\":{";
-    json += "\"pro1\":{\"name\":\"" + shellyPro1.cfg.name + "\",\"ip\":\"" + shellyPro1.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro1.channel_states) + ",\"en\":" + String(shellyPro1.cfg.enabled) + "},";
-    json += "\"pro2\":{\"name\":\"" + shellyPro2.cfg.name + "\",\"ip\":\"" + shellyPro2.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro2.channel_states) + ",\"ch1\":" + String(shellyPro2.channel_states) + ",\"en\":" + String(shellyPro2.cfg.enabled) + "}";
+    json += "\"pro1\":{\"name\":\"" + shellyPro1.cfg.name + "\",\"ip\":\"" + shellyPro1.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro1.channel_states[0]) + ",\"en\":" + String(shellyPro1.cfg.enabled) + "},";
+    json += "\"pro2\":{\"name\":\"" + shellyPro2.cfg.name + "\",\"ip\":\"" + shellyPro2.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro2.channel_states[0]) + ",\"ch1\":" + String(shellyPro2.channel_states[1]) + ",\"en\":" + String(shellyPro2.cfg.enabled) + "}";
     json += "}";
     json += "}";
 
@@ -37,14 +37,12 @@ void handleJsonRequest(AsyncWebServerRequest *request) {
 void startWebServer() {
     if (isWebServerStarted) return;
     
-    // Servera HTML-gränssnittet från web_pages.h på rotkatalogen (/)
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(200, "text/html", index_html);
     });
     
     server.on("/data", HTTP_GET, handleJsonRequest);
     
-    // REST API Ändpunkt för att spara inkommande JSON-scheman
     server.on("/api/schedule", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, 
     [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         
@@ -52,6 +50,9 @@ void startWebServer() {
         DeserializationError error = deserializeJson(doc, data, len);
         
         if (!error) {
+            // Uppdatera vald GUI-stil globalt
+            ui_style_version = doc["ui_style"] | ui_style_version;
+
             bool is8Channel = doc["is8ch"] | false;
             int ch = doc["channel"] | 0;
 
@@ -63,9 +64,7 @@ void startWebServer() {
                 elegoo.schedule8[ch].endHour = doc["endH"];
                 elegoo.schedule8[ch].endMinute = doc["endM"];
                 JsonArray daysArray = doc["days"];
-                for(int i = 0; i < 7; i++) {
-                    elegoo.schedule8[ch].days[i] = daysArray[i];
-                }
+                for(int i = 0; i < 7; i++) elegoo.schedule8[ch].days[i] = daysArray[i];
             } 
             else if (!is8Channel && ch >= 0 && ch < 4) {
                 elegoo.enabled_4ch = true;
@@ -75,12 +74,10 @@ void startWebServer() {
                 elegoo.schedule4[ch].endHour = doc["endH"];
                 elegoo.schedule4[ch].endMinute = doc["endM"];
                 JsonArray daysArray = doc["days"];
-                for(int i = 0; i < 7; i++) {
-                    elegoo.schedule4[ch].days[i] = daysArray[i];
-                }
+                for(int i = 0; i < 7; i++) elegoo.schedule4[ch].days[i] = daysArray[i];
             }
 
-            saveScheduleToNVS(); // Spara omedelbart till permanent blixtminne
+            saveScheduleToNVS(); // Spara scheman & GUI-stil direkt
             request->send(200, "application/json", "{\"status\":\"success\"}");
         } else {
             request->send(400, "application/json", "{\"status\":\"json error\"}");
@@ -89,7 +86,7 @@ void startWebServer() {
 
     server.begin();
     isWebServerStarted = true;
-    Serial.println("[Network] Asynkron webbserver startad på port 80!");
+    Serial.println("[Network] Asynkron webbserver aktiv!");
 }
 
 void controlShellyProRelay(ShellyDevice &device, int channel, bool state) {
@@ -107,26 +104,17 @@ void controlShellyProRelay(ShellyDevice &device, int channel, bool state) {
     
     if (httpResponseCode == 200) {
         device.channel_states[channel] = state;
-        Serial.printf("[Shelly] RPC OK: %s (Ch%d -> %s)\n", device.cfg.mac_or_ip.c_str(), channel, state ? "ON" : "OFF");
-    } else {
-        Serial.printf("[Shelly] RPC Fel mot %s: %d\n", device.cfg.mac_or_ip.c_str(), httpResponseCode);
     }
     http.end();
 }
 
 void initNetworkManager(String ssid, String pass) {
-    if (ssid == "" || ssid == "DITT_WIFI_SSID") {
-        Serial.println("[Network] Wi-Fi saknas, kör offline.");
-        return;
-    }
+    if (ssid == "" || ssid == "DITT_WIFI_SSID") return;
     WiFi.begin(ssid.c_str(), pass.c_str());
-    Serial.println("[Network] Wi-Fi initierat.");
 }
 
 void updateNetworkData() {
     if (WiFi.status() == WL_CONNECTED && !isWebServerStarted) {
-        Serial.print("[Network] Wi-Fi Anslutet! IP: ");
-        Serial.println(WiFi.localIP());
         startWebServer();
     }
 }
