@@ -33,18 +33,19 @@ void setBacklightBrightness(int brightness) {
 
 void initBacklight() {
     Serial.println("[Backlight] Initierar ljusstyrkesystem...");
-    Wire.begin(8, 9); 
     
+    // Starta standard Wire på de interna stiften för skärmens expander
+    Wire.begin(8, 9); 
     internalExpander = new ESP32_IO_Expander_TCA9554(Wire, 0x20);
     
     if (internalExpander && internalExpander->begin()) {
-        Serial.println("[Backlight] Hårdvarurevision v4 detekterad!");
+        Serial.println("[Backlight] Hårdvarurevision v4 detekterad (TCA9554 hittad)!");
         isHardwareRevisionV4 = true;
         internalExpander->pinMode(1, OUTPUT); 
         internalExpander->pinMode(4, OUTPUT); 
         internalExpander->digitalWrite(1, HIGH);
     } else {
-        Serial.println("[Backlight] Hårdvarurevision v1-v3 detekterad.");
+        Serial.println("[Backlight] Hårdvarurevision v1-v3 detekterad (Kör GPIO PWM).");
         isHardwareRevisionV4 = false;
         ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
         ledcAttachPin(LEGACY_BL_PIN, PWM_CHANNEL);
