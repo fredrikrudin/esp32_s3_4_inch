@@ -56,4 +56,7 @@ Säkerställ att följande bibliotek är installerade innan du kompilerar:
 ## 🛠 Felsökning
 Om skärmen är svart eller USB-porten inte svarar:
 1. Håll in **BOOT**-knappen på baksidan, tryck snabbt på **RST**, och släpp sedan **BOOT** för att tvinga in kretsen i bootloader-läge.
+
+## Waveshare wiki för hårdvaran
+https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-4?srsltid=AfmBOoqFlqT4-1Bk7TU7iULHEJSVhwUwnNRhCOGrgfJHa1z8DEn0Dcy5
 2. Kontrollera inkluderingsordningen i `VenusOS_ESP32.ino`: `storage_manager.h` **måste** ligga ovanför `network_manager.h` för att alla länkningar ska fungera vid kompilering.
