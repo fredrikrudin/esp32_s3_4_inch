@@ -68,7 +68,7 @@ struct XiaomiMijiaDevice {
 struct ShellyDevice {
     DeviceConfig cfg;
     int total_channels;    
-    bool channel_states[2]; // Sparar status för respektive reläkanal [0] och [1]
+    bool channel_states[2]; // Stöder upp till 2 kanaler
 };
 
 // Uppgraderad flexibel struktur för Tid- och Datumschemaläggning (Victron-stil)
@@ -77,7 +77,7 @@ struct RelaySchedule {
     int startMinute;    // Startminut (0-59)
     int endHour;        // Stopptimme (0-23)
     int endMinute;      // Stoppminut (0-59)
-    bool days[7];       // Måndag till Söndag. true = aktiv.
+    bool days[7];       // Måndag till Söndag. true = aktiv den dagen.
     bool isEnabled;     // Är detta schema aktiverat?
 };
 
@@ -93,7 +93,8 @@ struct ElegooRelaySystem {
 // ==========================================
 // 3. GLOBALA INSTANSER & SYSTEMVARIABLER
 // ==========================================
-extern VictronDevice shunt, mppt, ip22, inverter;
+extern VictronDevice shunt, mppt, ip22;
+extern VictronInverter inverter;
 extern RuuviTagDevice ruuvi;
 extern XiaomiMijiaDevice mijia;
 extern ShellyDevice shellyPro1, shellyPro2;
@@ -119,5 +120,8 @@ extern lv_obj_t * lbl_footer_clock;
 extern lv_obj_t * btn_hamburger;
 extern lv_obj_t * page_settings_container; 
 extern lv_obj_t * page_overview_container; 
+extern lv_obj_t * page_environment_container;
+
 extern lv_obj_t * lbl_inverter_pwr;
+
 #endif // CONFIG_H
