@@ -5,7 +5,10 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h> 
 #include <HTTPClient.h>
+#include <ArduinoJson.h> // Krävs för att packa upp JSON-scheman
 #include "config.h"
+#include "storage_manager.h" // Krävs för saveScheduleToNVS()
+#include "web_pages.h"       // Inkluderar den utbrutna HTML-strängen
 
 AsyncWebServer server(80);
 bool isWebServerStarted = false;
@@ -23,8 +26,8 @@ void handleJsonRequest(AsyncWebServerRequest *request) {
     json += "\"xiaomi\":{\"name\":\"" + mijia.cfg.name + "\",\"t\":" + String(mijia.temperature) + ",\"h\":" + String(mijia.humidity) + ",\"bat\":" + String(mijia.battery_level) + ",\"en\":" + String(mijia.cfg.enabled) + "}";
     json += "},";
     json += "\"shelly\":{";
-    json += "\"pro1\":{\"name\":\"" + shellyPro1.cfg.name + "\",\"ip\":\"" + shellyPro1.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro1.channel_states[0]) + ",\"en\":" + String(shellyPro1.cfg.enabled) + "},";
-    json += "\"pro2\":{\"name\":\"" + shellyPro2.cfg.name + "\",\"ip\":\"" + shellyPro2.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro2.channel_states[0]) + ",\"ch1\":" + String(shellyPro2.channel_states[1]) + ",\"en\":" + String(shellyPro2.cfg.enabled) + "}";
+    json += "\"pro1\":{\"name\":\"" + shellyPro1.cfg.name + "\",\"ip\":\"" + shellyPro1.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro1.channel_states) + ",\"en\":" + String(shellyPro1.cfg.enabled) + "},";
+    json += "\"pro2\":{\"name\":\"" + shellyPro2.cfg.name + "\",\"ip\":\"" + shellyPro2.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro2.channel_states) + ",\"ch1\":" + String(shellyPro2.channel_states) + ",\"en\":" + String(shellyPro2.cfg.enabled) + "}";
     json += "}";
     json += "}";
 
@@ -33,10 +36,57 @@ void handleJsonRequest(AsyncWebServerRequest *request) {
 
 void startWebServer() {
     if (isWebServerStarted) return;
+    
+    // Servera HTML-gränssnittet från web_pages.h på rotkatalogen (/)
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(200, "text/plain", "📊 VenusOS GUI v2 Klon - Server Aktiv. Gå till /data");
+        request->send(200, "text/html", index_html);
     });
+    
     server.on("/data", HTTP_GET, handleJsonRequest);
+    
+    // REST API Ändpunkt för att spara inkommande JSON-scheman
+    server.on("/api/schedule", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, 
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        
+        DynamicJsonDocument doc(2048);
+        DeserializationError error = deserializeJson(doc, data, len);
+        
+        if (!error) {
+            bool is8Channel = doc["is8ch"] | false;
+            int ch = doc["channel"] | 0;
+
+            if (is8Channel && ch >= 0 && ch < 8) {
+                elegoo.enabled_8ch = true;
+                elegoo.schedule8[ch].isEnabled = doc["enabled"];
+                elegoo.schedule8[ch].startHour = doc["startH"];
+                elegoo.schedule8[ch].startMinute = doc["startM"];
+                elegoo.schedule8[ch].endHour = doc["endH"];
+                elegoo.schedule8[ch].endMinute = doc["endM"];
+                JsonArray daysArray = doc["days"];
+                for(int i = 0; i < 7; i++) {
+                    elegoo.schedule8[ch].days[i] = daysArray[i];
+                }
+            } 
+            else if (!is8Channel && ch >= 0 && ch < 4) {
+                elegoo.enabled_4ch = true;
+                elegoo.schedule4[ch].isEnabled = doc["enabled"];
+                elegoo.schedule4[ch].startHour = doc["startH"];
+                elegoo.schedule4[ch].startMinute = doc["startM"];
+                elegoo.schedule4[ch].endHour = doc["endH"];
+                elegoo.schedule4[ch].endMinute = doc["endM"];
+                JsonArray daysArray = doc["days"];
+                for(int i = 0; i < 7; i++) {
+                    elegoo.schedule4[ch].days[i] = daysArray[i];
+                }
+            }
+
+            saveScheduleToNVS(); // Spara omedelbart till permanent blixtminne
+            request->send(200, "application/json", "{\"status\":\"success\"}");
+        } else {
+            request->send(400, "application/json", "{\"status\":\"json error\"}");
+        }
+    });
+
     server.begin();
     isWebServerStarted = true;
     Serial.println("[Network] Asynkron webbserver startad på port 80!");
@@ -80,48 +130,5 @@ void updateNetworkData() {
         startWebServer();
     }
 }
-// Sätts i din AsyncWebServer-uppstart (t.ex. server.on)
-server.on("/api/schedule", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, 
-[](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    
-    // Använd ArduinoJson för att packa upp data från webbläsaren
-    DynamicJsonDocument doc(2048);
-    DeserializationError error = deserializeJson(doc, data, len);
-    
-    if (!error) {
-        bool is8Channel = doc["is8ch"] | false;
-        int ch = doc["channel"] | 0;
-
-        if (is8Channel && ch >= 0 && ch < 8) {
-            elegoo.enabled_8ch = true;
-            elegoo.schedule8[ch].isEnabled = doc["enabled"];
-            elegoo.schedule8[ch].startHour = doc["startH"];
-            elegoo.schedule8[ch].startMinute = doc["startM"];
-            elegoo.schedule8[ch].endHour = doc["endH"];
-            elegoo.schedule8[ch].endMinute = doc["endM"];
-            JsonArray daysArray = doc["days"];
-            for(int i = 0; i < 7; i++) {
-                elegoo.schedule8[ch].days[i] = daysArray[i];
-            }
-        } 
-        else if (!is8Channel && ch >= 0 && ch < 4) {
-            elegoo.enabled_4ch = true;
-            elegoo.schedule4[ch].isEnabled = doc["enabled"];
-            elegoo.schedule4[ch].startHour = doc["startH"];
-            elegoo.schedule4[ch].startMinute = doc["startM"];
-            elegoo.schedule4[ch].endHour = doc["endH"];
-            elegoo.schedule4[ch].endMinute = doc["endM"];
-            JsonArray daysArray = doc["days"];
-            for(int i = 0; i < 7; i++) {
-                elegoo.schedule4[ch].days[i] = daysArray[i];
-            }
-        }
-
-        saveScheduleToNVS(); // Skriv direkt till flash-minnet via lagringsmodulen
-        request->send(200, "application/json", "{\"status\":\"success\"}");
-    } else {
-        request->send(400, "application/json", "{\"status\":\"json error\"}");
-    }
-});
 
 #endif // NETWORK_MANAGER_H
