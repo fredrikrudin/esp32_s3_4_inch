@@ -14,7 +14,7 @@ struct DeviceConfig {
 // Universell Victron-struktur för BLE Instant Readout
 struct VictronDevice {
     DeviceConfig cfg;
-    String key;         // 16-bytes AES-krypteringsnyckel för dekryptering
+    String key;         // 32-teckens (16-bytes) AES-krypteringsnyckel för dekryptering
     float voltage;
     float current;
     float soc;
@@ -39,7 +39,7 @@ struct XiaomiMijiaDevice {
 struct ShellyDevice {
     DeviceConfig cfg;
     int total_channels;    // 1 för Pro 1, 2 för Pro 2
-    bool channel_states[2]; // Sparar status för respektive reläkanal
+    bool channel_states[2]; // Sparar status för respektive reläkanal [0] och [1]
 };
 
 struct RelaySchedule { 
@@ -75,13 +75,11 @@ const int I2C_SCL_PIN = 7;
 const int RELAY_4CH_PINS[] = {0, 1, 2, 3};
 const int RELAY_8CH_PINS[] = {0, 1, 2, 3, 4, 5, 6, 7};
 
-// Globala LVGL-objekt för inställningssidan och tangentbord
+// Globala LVGL-objekt (Deklareras som extern här, allokeras i huvudskissen)
 extern lv_obj_t * main_keyboard;
-
-// Lägg till dessa rader i slutet av din config.h (innan #endif)
-extern lv_obj_t *lbl_footer_clock;
-extern lv_obj_t *btn_hamburger;
-extern lv_obj_t *page_settings_container; // Behållare för inställningssidan
-extern lv_obj_t *page_overview_container; // Behållare för översiktssidan
+extern lv_obj_t * lbl_footer_clock;
+extern lv_obj_t * btn_hamburger;
+extern lv_obj_t * page_settings_container; 
+extern lv_obj_t * page_overview_container; 
 
 #endif // CONFIG_H
