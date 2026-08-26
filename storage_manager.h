@@ -5,29 +5,26 @@
 #include <Preferences.h>
 #include "config.h"
 
-// Uppdaterad sparfunktion som inkluderar Victrons krypteringsnyckel
 inline void saveVictronDeviceConfig(const char* namespaceKey, const VictronDevice &dev) {
     Preferences prefs;
     prefs.begin(namespaceKey, false);
     prefs.putString("name", dev.cfg.name);
     prefs.putString("addr", dev.cfg.mac_or_ip);
     prefs.putBool("en", dev.cfg.enabled);
-    prefs.putString("v_key", dev.key); // Sparar AES-nyckeln
+    prefs.putString("v_key", dev.key);
     prefs.end();
 }
 
-// Uppdaterad inläsningsfunktion för Victron
 inline void loadVictronDeviceConfig(const char* namespaceKey, VictronDevice &dev, String defaultAddr, String defaultKey, String defaultName) {
     Preferences prefs;
     prefs.begin(namespaceKey, true);
     dev.cfg.name = prefs.getString("name", defaultName);
     dev.cfg.mac_or_ip = prefs.getString("addr", defaultAddr);
     dev.cfg.enabled = prefs.getBool("en", false);
-    dev.key = prefs.getString("v_key", defaultKey); // Läser AES-nyckeln
+    dev.key = prefs.getString("v_key", defaultKey);
     prefs.end();
 }
 
-// Generella spara/ladda för vanliga sensorer (Ruuvi, Shelly mm)
 inline void saveDevice(const char* key, const DeviceConfig &cfg) {
     Preferences prefs;
     prefs.begin(key, false);
@@ -46,33 +43,33 @@ inline void loadDevice(const char* key, DeviceConfig &cfg, String defaultAddr, S
     prefs.end();
 }
 
-// Sparar enbart skedulerings- och reläblocken
 inline void saveScheduleToNVS() {
     Preferences prefs;
     prefs.begin("venus_sched", false);
     prefs.putBytes("sched_data", &elegoo, sizeof(ElegooRelaySystem));
+    prefs.putInt("ui_style", ui_style_version); // Sparar gränssnittsstil
     prefs.end();
-    Serial.println("[Storage] Reläskeduleringsdata har skrivits till Flash.");
+    Serial.println("[Storage] Reläscheman och GUI-stil synkade till Flash.");
 }
 
-// Läser enbart skedulerings- och reläblocken
 inline void loadScheduleFromNVS() {
     Preferences prefs;
     prefs.begin("venus_sched", true);
+    ui_style_version = prefs.getInt("ui_style", 2); // Standard till GUI-v2
+    
     if (prefs.isKey("sched_data")) {
         prefs.getBytes("sched_data", &elegoo, sizeof(ElegooRelaySystem));
-        Serial.println("[Storage] Reläskeduleringsdata har laddats från Flash.");
+        Serial.println("[Storage] Reläscheman och GUI-stil laddade från Flash.");
     } else {
-        Serial.println("[Storage] Inga sparade reläscheman hittades. Initierar grundvärden.");
+        Serial.println("[Storage] Inga scheman hittades. Initierar tomma strukturer.");
         elegoo.enabled_4ch = false;
         elegoo.enabled_8ch = false;
-        for(int i = 0; i < 4; i++) elegoo.schedule4[i].isEnabled = false;
-        for(int i = 0; i < 8; i++) elegoo.schedule8[i].isEnabled = false;
+        for(int i=0; i<4; i++) elegoo.schedule4[i].isEnabled = false;
+        for(int i=0; i<8; i++) elegoo.schedule8[i].isEnabled = false;
     }
     prefs.end();
 }
 
-// Samlingsfunktion för att lagra absolut allt i systemet permanent
 inline void saveAllSettings() {
     saveVictronDeviceConfig("shunt", shunt);
     saveVictronDeviceConfig("mppt", mppt);
@@ -81,14 +78,10 @@ inline void saveAllSettings() {
     saveDevice("mijia", mijia.cfg);
     saveDevice("sh_pro1", shellyPro1.cfg);
     saveDevice("sh_pro2", shellyPro2.cfg);
-    
-    // Inkludera reläsystemet i den allmänna synkroniseringen
     saveScheduleToNVS();
-    
-    Serial.println("[Storage] Alla enheter, scheman och krypteringsnycklar har synkroniserats till Flash!");
+    Serial.println("[Storage] Absolut alla systeminställningar sparade till Flash!");
 }
 
-// Samlingsfunktion för att hämta absolut allt i systemet vid boot
 inline void loadAllSettings() {
     loadVictronDeviceConfig("shunt", shunt, "00:11:22:33:44:55", "00000000000000000000000000000000", "Huvudshunt");
     loadVictronDeviceConfig("mppt", mppt, "66:77:88:99:AA:BB", "00000000000000000000000000000000", "Solceller MPPT");
@@ -99,9 +92,7 @@ inline void loadAllSettings() {
     loadDevice("sh_pro1", shellyPro1.cfg, "192.168.1.50", "Shelly Pro 1 Varmvatten");
     loadDevice("sh_pro2", shellyPro2.cfg, "192.168.1.51", "Shelly Pro 2 Belysning");
     
-    // Inkludera reläsystemet i uppstartsladdningen
     loadScheduleFromNVS();
-    
     Serial.println("[Storage] Samtliga krypteringskonfigurationer och scheman inlästa.");
 }
 
