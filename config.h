@@ -78,4 +78,10 @@ const int RELAY_8CH_PINS[] = {0, 1, 2, 3, 4, 5, 6, 7};
 // Globala LVGL-objekt för inställningssidan och tangentbord
 extern lv_obj_t * main_keyboard;
 
+// Lägg till dessa rader i slutet av din config.h (innan #endif)
+extern lv_obj_t *lbl_footer_clock;
+extern lv_obj_t *btn_hamburger;
+extern lv_obj_t *page_settings_container; // Behållare för inställningssidan
+extern lv_obj_t *page_overview_container; // Behållare för översiktssidan
+
 #endif // CONFIG_H
