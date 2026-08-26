@@ -19,9 +19,8 @@ struct ElegooRelaySystem {
 
 struct DiscoveredDevice { String mac; String type; int rssi; bool supported; };
 
-// Temporär ändring för att verifiera att USB-porten överlever
-const int RELAY_4CH_PINS[] = {99, 99, 99, 99}; 
-const int RELAY_8CH_PINS[] = {99, 99, 99, 99, 99, 99, 99, 99};
+const int RELAY_4CH_PINS[] = {1, 2, 42, 41}; 
+const int RELAY_8CH_PINS[] = {4, 5, 6, 7, 15, 16, 17, 18};
 
 
 extern VictronDevice shunt, mppt, ip22;
