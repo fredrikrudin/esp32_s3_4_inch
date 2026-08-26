@@ -119,5 +119,5 @@ extern lv_obj_t * lbl_footer_clock;
 extern lv_obj_t * btn_hamburger;
 extern lv_obj_t * page_settings_container; 
 extern lv_obj_t * page_overview_container; 
-
+extern lv_obj_t * lbl_inverter_pwr;
 #endif // CONFIG_H
