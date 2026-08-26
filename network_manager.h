@@ -5,7 +5,7 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h> 
 #include <HTTPClient.h>
-#include <ArduinoJson.h> 
+#include <ArduinoJson.h> // Krävs för att packa upp JSON-scheman
 #include "config.h"
 #include "storage_manager.h" 
 #include "web_pages.h"       
@@ -20,7 +20,7 @@ void handleJsonRequest(AsyncWebServerRequest *request) {
     json += "\"shunt\":{\"name\":\"" + shunt.cfg.name + "\",\"v\":" + String(shunt.voltage) + ",\"a\":" + String(shunt.current) + ",\"soc\":" + String(shunt.soc) + ",\"p\":" + String(shunt.power) + ",\"en\":" + String(shunt.cfg.enabled) + "},";
     json += "\"mppt\":{\"name\":\"" + mppt.cfg.name + "\",\"v\":" + String(mppt.voltage) + ",\"a\":" + String(mppt.current) + ",\"soc\":" + String(mppt.soc) + ",\"p\":" + String(mppt.power) + ",\"en\":" + String(mppt.cfg.enabled) + "},";
     json += "\"ip22\":{\"name\":\"" + ip22.cfg.name + "\",\"v\":" + String(ip22.voltage) + ",\"a\":" + String(ip22.current) + ",\"soc\":" + String(ip22.soc) + ",\"p\":" + String(ip22.power) + ",\"en\":" + String(ip22.cfg.enabled) + "},";
-    json += "\"inverter\":{\"name\":\"" + inverter.cfg.name + "\",\"ac_v\":" + String(inverter.ac_voltage) + ",\"ac_w\":" + String(inverter.ac_power) + ",\"state\":" + String(inverter.state) + ",\"en\":" + String(inverter.cfg.enabled) + "}";
+    json += "\"inverter\":{\"name\":\"" + inverter.cfg.name + "\",\"p\":" + String(inverter.ac_power) + ",\"state\":" + String(inverter.state) + ",\"en\":" + String(inverter.cfg.enabled) + "}";
     json += "},";
     json += "\"sensors\":{";
     json += "\"ruuvi\":{\"name\":\"" + ruuvi.cfg.name + "\",\"t\":" + String(ruuvi.temperature) + ",\"h\":" + String(ruuvi.humidity) + ",\"en\":" + String(ruuvi.cfg.enabled) + "},";
@@ -52,6 +52,7 @@ void startWebServer() {
         
         if (!error) {
             ui_style_version = doc["ui_style"] | ui_style_version;
+
             bool is8Channel = doc["is8ch"] | false;
             int ch = doc["channel"] | 0;
 
@@ -85,12 +86,12 @@ void startWebServer() {
 
     server.begin();
     isWebServerStarted = true;
-    Serial.println("[Network] Webbserver startad.");
+    Serial.println("[Network] Asynkron webbserver aktiv!");
 }
 
 void controlShellyProRelay(ShellyDevice &device, int channel, bool state) {
     if (!device.cfg.enabled || device.cfg.mac_or_ip == "" || device.cfg.mac_or_ip == "0.0.0.0") return;
-    if (channel >= 2) return;
+    if (channel >= device.total_channels) return;
 
     String url = "http://" + device.cfg.mac_or_ip + "/rpc/Switch.Set";
     HTTPClient http;
@@ -100,7 +101,10 @@ void controlShellyProRelay(ShellyDevice &device, int channel, bool state) {
 
     String jsonPayload = "{\"id\":" + String(channel) + ",\"on\":" + (state ? "true" : "false") + "}";
     int httpResponseCode = http.POST(jsonPayload);
-    if (httpResponseCode == 200) device.channel_states[channel] = state;
+    
+    if (httpResponseCode == 200) {
+        device.channel_states[channel] = state;
+    }
     http.end();
 }
 
@@ -110,7 +114,9 @@ void initNetworkManager(String ssid, String pass) {
 }
 
 void updateNetworkData() {
-    if (WiFi.status() == WL_CONNECTED && !isWebServerStarted) startWebServer();
+    if (WiFi.status() == WL_CONNECTED && !isWebServerStarted) {
+        startWebServer();
+    }
 }
 
 #endif // NETWORK_MANAGER_H
