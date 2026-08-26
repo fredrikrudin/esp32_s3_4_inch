@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 
-// HTML-sida inbakad i koden som ett gränssnitt för att styra scheman direkt via IP-adressen (/)
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html>
 <head>
@@ -11,10 +10,19 @@ const char index_html[] PROGMEM = R"rawliteral(
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="UTF-8">
 </head>
-<body style="background: #1a1a1a; color: #fff; font-family: sans-serif; padding: 20px; display: flex; justify-content: center;">
-    <div class="card" style="padding: 20px; border-radius: 6px; background: #2b2b2b; max-width: 450px; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-        <h3 style="margin-top:0; border-bottom: 1px solid #444; padding-bottom: 8px; color: #f39c12;">📆 VenusOS Reläskedulering</h3>
+<body style="background: #1a1a1a; color: #fff; font-family: sans-serif; padding: 20px; display: flex; flex-direction: column; align-items: center;">
+    <div class="card" style="padding: 20px; border-radius: 6px; background: #2b2b2b; max-width: 450px; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px;">
+        <h3 style="margin-top:0; border-bottom: 1px solid #444; padding-bottom: 8px; color: #f39c12;">📆 VenusOS Reläskedulering & Gränssnitt</h3>
         <form id="relayScheduleForm" onsubmit="sendRelaySchedule(event)">
+            
+            <div style="margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 12px;">
+                <label style="font-weight:bold;">Skärmutseende (GUI): </label>
+                <select id="ui_version_select" style="background:#444; color:#fff; border:1px solid #666; padding:5px; border-radius:4px;">
+                    <option value="1">Klassisk Kvadratisk (v1)</option>
+                    <option value="2" selected>Victron Cirkulär (v2)</option>
+                </select>
+            </div>
+
             <div style="margin-bottom: 12px;">
                 <label>Välj reläkort: </label>
                 <select id="board_type" onchange="updateChannelOptions()" style="background:#444; color:#fff; border:1px solid #666; padding:5px; border-radius:4px;">
@@ -44,7 +52,7 @@ const char index_html[] PROGMEM = R"rawliteral(
                 <input type="checkbox" id="day6"> Sön 
             </div>
             <button type="submit" style="background: #27ae60; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; font-size: 15px;">
-                Spara Schema i Systemet
+                Spara Inställningar & Schema
             </button>
         </form>
     </div>
@@ -66,6 +74,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         const startTime = document.getElementById('sched_start').value.split(':');
         const endTime = document.getElementById('sched_end').value.split(':');
         const payload = {
+            ui_style: parseInt(document.getElementById('ui_version_select').value),
             is8ch: document.getElementById('board_type').value === '8ch',
             channel: parseInt(document.getElementById('relay_channel').value),
             enabled: document.getElementById('sched_enabled').checked,
@@ -87,7 +96,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         })
         .then(res => res.json())
         .then(data => {
-            if(data.status === "success") alert('Schemat sparades framgångsrikt i din ESP32!');
+            if(data.status === "success") alert('Inställningarna sparades framgångsrikt i din ESP32!');
             else alert('Ett fel uppstod: ' + data.status);
         })
         .catch(err => alert('Nätverksfel vid kommunikation: ' + err));
