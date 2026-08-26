@@ -5,11 +5,12 @@
 #include "elegoo_relay_manager.h"
 #include "storage_manager.h"
 
-// Instansiera globala variabler
+// Allokera globala variabler och I2C-bussar
 SemaphoreHandle_t lvgl_mutex = NULL;
 TwoWire InternalI2C = TwoWire(0);
 TwoWire ExternalI2C = TwoWire(1);
 
+// Allokera dina systemstrukturer
 VictronDevice shunt, mppt, ip22;
 RuuviTagDevice ruuvi;
 XiaomiMijiaDevice mijia;
@@ -21,29 +22,30 @@ String wifi_pass = "";
 int update_interval = 1000;
 int display_brightness = 255;
 
-// Globala LVGL-objektallokeringar
+// Allokera globala LVGL-pekare
 lv_obj_t * main_keyboard = nullptr;
 lv_obj_t * lbl_footer_clock = nullptr;
 lv_obj_t * btn_hamburger = nullptr;
 lv_obj_t * page_settings_container = nullptr; 
 lv_obj_t * page_overview_container = nullptr; 
 
-// --- ASYNKRON TASK: KLOCKEDRIVEN RELÄAUTOMATION (Core 0) ---
+// --- ASYNKRON TASK 1: TID- OCH DATUMAUTOMATION (Core 0) ---
 void clockSchedulingTask(void *pvParameters) {
-    // Ställ in svensk tidszon med automatisk sommar/vintertid
+    // Konfigurera svensk lokaltid med automatisk sommar/vintertid
     configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.nist.gov");
-    Serial.println("[Skedulering] Klocka och tidsstyrning startad.");
+    Serial.println("[Skedulering] Klocka och tidsstyrning startad på Core 0.");
 
     while(1) {
         struct tm timeinfo;
         if (!getLocalTime(&timeinfo)) {
-            Serial.println("[Klocka] Väntar på synkronisering mot NTP...");
+            Serial.println("[Klocka] Synkroniserar mot NTP-server...");
             vTaskDelay(pdMS_TO_TICKS(5000)); 
             continue;
         }
 
+        // Konvertera tm_wday (0=Sön, 1=Mån...) till vårt format (0=Mån, 6=Sön)
         int currentDayOfWeek = timeinfo.tm_wday - 1;
-        if (currentDayOfWeek < 0) currentDayOfWeek = 6; // Söndag = 6
+        if (currentDayOfWeek < 0) currentDayOfWeek = 6; 
 
         int nowInMinutes = (timeinfo.tm_hour * 60) + timeinfo.tm_min;
 
@@ -77,39 +79,42 @@ void clockSchedulingTask(void *pvParameters) {
             }
         }
         
-        vTaskDelay(pdMS_TO_TICKS(60000)); // Körs en gång per minut
+        vTaskDelay(pdMS_TO_TICKS(60000)); // Utvärdera en gång i minuten
     }
 }
 
-// --- ASYNKRON TASK: LVGL RENDERING (Core 1) ---
+// --- ASYNKRON TASK 2: LVGL RENDERINGS-MOTOR (Core 1) ---
 void lvglRenderTask(void *pvParameters) {
   while(1) {
     if (lvgl_mutex != NULL) {
       if (xSemaphoreTake(lvgl_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        // lv_timer_handler(); // Ersätt med din faktiska LVGL-handler loop
+        // lv_timer_handler(); // Ersätt med din faktiska LVGL-handler anrop om den ligger i cpp
         xSemaphoreGive(lvgl_mutex);
       }
     }
-    vTaskDelay(pdMS_TO_TICKS(5)); // Mjuk touch och grafik i ~200Hz
+    vTaskDelay(pdMS_TO_TICKS(5)); // Mjuk grafik och touch (200Hz)
   }
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
+  Serial.println("Startar VenusOS Moduler...");
 
+  // Skapa skyddsmutex
   lvgl_mutex = xSemaphoreCreateMutex();
   if (lvgl_mutex == NULL) while(1);
 
-  // Initiera hårdvarubussarna separat
+  // Starta I2C-bussar oberoende av varandra
   InternalI2C.begin(INTERNAL_SDA, INTERNAL_SCL, INTERNAL_I2C_FREQ);
   ExternalI2C.begin(EXTERNAL_SDA, EXTERNAL_SCL, EXTERNAL_I2C_FREQ);
 
-  // Ladda inställningar och reläscheman permanent från NVS
+  // Ladda data från NVS-blixtminnet
   loadScheduleFromNVS();
 
-  xTaskCreatePinnedToCore(lvglRenderTask, "LVGL_Render", 8192, NULL, 3, NULL, 1);
-  xTaskCreatePinnedToCore(clockSchedulingTask, "Clock_Schedule", 4096, NULL, 1, NULL, 0);
+  // Skapa asynkrona mjukvarutasks i FreeRTOS-skeduleraren
+  xTaskCreatePinnedToCore(lvglRenderTask, "LVGL_Render", 8192, NULL, 3, NULL, 1); // Core 1 till UI
+  xTaskCreatePinnedToCore(clockSchedulingTask, "Clock_Schedule", 4096, NULL, 1, NULL, 0); // Core 0 till Klocka
 
   ble_manager_init();
   // network_manager_init();
