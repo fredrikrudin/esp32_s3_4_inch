@@ -4,15 +4,16 @@
 void processRuuviBLE(BLEAdvertisedDevice& device) {
     std::string data = device.getManufacturerData();
     
-    // RuuviTag Data Format 5 (Rawv2) tolkning:
+    // Säkerställ att vi har tillräckligt med bytes och parsa array-index korrekt
     if (data.length() >= 26) {
-        int16_t raw_temp = (data[4] << 8) | data[5];
-        uint16_t raw_hum = (data[6] << 8) | data[7];
+        // Castar till uint8_t för att kunna göra korrekt bit-shifting på specifika bytes
+        const uint8_t* rawData = (const uint8_t*)data.data();
+        
+        int16_t raw_temp = (rawData[4] << 8) | rawData[5];
+        uint16_t raw_hum = (rawData[6] << 8) | rawData[7];
         
         float temperature = raw_temp * 0.005;
         float humidity = raw_hum * 0.0025;
-        
-        // Här uppdateras värdena som visas på skärmen
-        // Serial.printf("[Ruuvi] Temp: %.2f C, Fukt: %.2f %%\n", temperature, humidity);
     }
 }
+
