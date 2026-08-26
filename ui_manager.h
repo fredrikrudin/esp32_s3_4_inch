@@ -4,11 +4,11 @@
 #include <lvgl.h>
 #include "config.h"
 #include "storage_manager.h"
+#include "page_shelly.h" // Inkludera den nya Shelly-sidan
 
 // Externa funktionsdeklarationer från andra moduler
 extern void triggerManualDiscovery(const char* typeFilter); 
 extern void create_overview_page(lv_obj_t *parent);
-extern void create_settings_page(lv_obj_t *parent);
 
 // Globala gränssnittsobjekt för navigering och inmatning
 lv_obj_t *main_keyboard = nullptr;
@@ -16,6 +16,7 @@ lv_obj_t *lbl_footer_clock = nullptr;
 lv_obj_t *btn_hamburger = nullptr;
 lv_obj_t *page_settings_container = nullptr;
 lv_obj_t *page_overview_container = nullptr;
+lv_obj_t *page_shelly_container = nullptr; // Ny behållare för Shelly-sidan
 
 // Globala objekt för sökmodulen (Discovery Popup)
 lv_obj_t *discovery_popup = nullptr;
@@ -48,6 +49,7 @@ static void ta_event_handler(lv_event_t * e) {
             lv_obj_align(main_keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
         }
         lv_keyboard_set_textarea(main_keyboard, ta);
+        // Växla till siffer-/hex-läge om det är en krypteringstagg, annars vanlig text
         lv_keyboard_set_mode(main_keyboard, ctx->isKeyField ? LV_KEYBOARD_MODE_NUMBER : LV_KEYBOARD_MODE_TEXT_LOWER);
     }
     
@@ -144,18 +146,27 @@ static void scan_trigger_callback(lv_event_t * e) {
     triggerManualDiscovery(scanCtx->typeFilter);
 }
 
-// Växlar mjukt mellan Mätarskärmen och Inställningsmenyn
+// Navigeringskarusell: Översikt (Mätare) -> Shelly -> Inställningar -> Översikt
 static void hamburger_click_event_handler(lv_event_t * e) {
-    if (lv_obj_has_flag(page_settings_container, LV_OBJ_FLAG_HIDDEN)) {
+    lv_obj_t * label = lv_obj_get_child(btn_hamburger, 0);
+
+    // 1. Om vi är på Översiktssidan -> Gå till Shelly-sidan
+    if (!lv_obj_has_flag(page_overview_container, LV_OBJ_FLAG_HIDDEN)) {
         lv_obj_add_flag(page_overview_container, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(page_shelly_container, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(label, LV_SYMBOL_SETTINGS); // Visa kugghjul (Inställningar) som nästa steg
+    } 
+    // 2. Om vi är på Shelly-sidan -> Gå till Inställningssidan
+    else if (!lv_obj_has_flag(page_shelly_container, LV_OBJ_FLAG_HIDDEN)) {
+        lv_obj_add_flag(page_shelly_container, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(page_settings_container, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_t * label = lv_obj_get_child(btn_hamburger, 0);
-        lv_label_set_text(label, LV_SYMBOL_HOME);
-    } else {
+        lv_label_set_text(label, LV_SYMBOL_HOME); // Visa hemikon för att gå tillbaka till start
+    } 
+    // 3. Om vi är på Inställningssidan -> Gå tillbaka till Översiktssidan (Start)
+    else {
         lv_obj_add_flag(page_settings_container, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(page_overview_container, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_t * label = lv_obj_get_child(btn_hamburger, 0);
-        lv_label_set_text(label, LV_SYMBOL_LIST);
+        lv_label_set_text(label, LV_SYMBOL_LIST); // Visa hamburgermeny-symbolen igen
     }
 }
 // Skapar en enskild rad i inställningslistan med switch, textfält och sökknapp
@@ -233,7 +244,6 @@ void add_device_to_settings_list(lv_obj_t * list, DeviceConfig &cfg, const char*
     }
 }
 
-// Genererar inställningssidan och dess listvy
 void create_settings_page(lv_obj_t * parent) {
     lv_obj_t * list = lv_list_create(parent);
     lv_obj_set_size(list, 450, 340); 
@@ -248,7 +258,6 @@ void create_settings_page(lv_obj_t * parent) {
     add_device_to_settings_list(list, shellyPro2.cfg, "Shelly Pro 2 (2-Kanal)", "SHELLY");
 }
 
-// Skapar den fasta bottenmenyn med klocka
 void create_footer_navigation() {
     lv_obj_t *footer = lv_obj_create(lv_scr_act());
     lv_obj_set_size(footer, 480, 50);
@@ -282,8 +291,8 @@ void create_footer_navigation() {
     lv_obj_add_event_cb(btn_hamburger, hamburger_click_event_handler, LV_EVENT_CLICKED, nullptr);
 }
 
-// Systeminitiering av fönsterlagren (Containers)
 void initDisplayAndUI() {
+    // 1. Skapa containern för Inställningssidan
     page_settings_container = lv_obj_create(lv_scr_act());
     lv_obj_set_size(page_settings_container, 480, 430);
     lv_obj_align(page_settings_container, LV_ALIGN_TOP_MID, 0, 0);
@@ -292,6 +301,16 @@ void initDisplayAndUI() {
     lv_obj_set_style_border_width(page_settings_container, 0, 0);
     create_settings_page(page_settings_container);
 
+    // 2. Skapa containern för den nya Shelly-sidan 🍏
+    page_shelly_container = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(page_shelly_container, 480, 430);
+    lv_obj_align(page_shelly_container, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_add_flag(page_shelly_container, LV_OBJ_FLAG_HIDDEN); // Dold vid start
+    lv_obj_set_style_bg_color(page_shelly_container, lv_color_make(15, 18, 24), 0);
+    lv_obj_set_style_border_width(page_shelly_container, 0, 0);
+    create_shelly_page(page_shelly_container); // Bygg knapparna från page_shelly.h
+
+    // 3. Skapa containern för Översiktssidan (Aktiv vid start)
     page_overview_container = lv_obj_create(lv_scr_act());
     lv_obj_set_size(page_overview_container, 480, 430);
     lv_obj_align(page_overview_container, LV_ALIGN_TOP_MID, 0, 0);
@@ -299,6 +318,7 @@ void initDisplayAndUI() {
     lv_obj_set_style_border_width(page_overview_container, 0, 0);
     create_overview_page(page_overview_container);
 
+    // 4. Skapa den fasta bottenmenyn överst på skärmlagret
     create_footer_navigation();
 }
 
