@@ -1,6 +1,7 @@
 #ifndef STORAGE_MANAGER_H
 #define STORAGE_MANAGER_H
 
+#include <Arduino.h>
 #include <Preferences.h>
 #include "config.h"
 
@@ -66,10 +67,10 @@ inline void saveScheduleToNVS() {
     Preferences prefs;
     prefs.begin("venus_sched", false);
     prefs.putBytes("sched_data", &elegoo, sizeof(ElegooRelaySystem));
-    prefs.putInt("ui_style", ui_style_version); 
+    prefs.putInt("ui_style", ui_style_version);
     prefs.putInt("brightness", display_brightness);
     prefs.end();
-    Serial.println("[Storage] Reläscheman, ljusstyrka och GUI-stil sparade till NVS.");
+    Serial.println("[Storage] Reläscheman, ljusstyrka och GUI-stil synkade till Flash.");
 }
 
 inline void loadScheduleFromNVS() {
@@ -80,9 +81,9 @@ inline void loadScheduleFromNVS() {
     
     if (prefs.isKey("sched_data")) {
         prefs.getBytes("sched_data", &elegoo, sizeof(ElegooRelaySystem));
-        Serial.println("[Storage] Reläscheman och GUI-stil laddade från NVS.");
+        Serial.println("[Storage] Reläscheman och GUI-stil laddade från Flash.");
     } else {
-        Serial.println("[Storage] Inga scheman hittades. Initierar grundvärden.");
+        Serial.println("[Storage] Inga scheman hittades. Initierar tomma strukturer.");
         elegoo.enabled_4ch = false;
         elegoo.enabled_8ch = false;
         for(int i=0; i<4; i++) elegoo.schedule4[i].isEnabled = false;
@@ -108,7 +109,7 @@ inline void loadAllSettings() {
     loadVictronDeviceConfig("shunt", shunt, "00:11:22:33:44:55", "00000000000000000000000000000000", "Huvudshunt");
     loadVictronDeviceConfig("mppt", mppt, "66:77:88:99:AA:BB", "00000000000000000000000000000000", "Solceller MPPT");
     loadVictronDeviceConfig("ip22", ip22, "CC:DD:EE:FF:00:11", "00000000000000000000000000000000", "Landström IP22");
-    loadVictronInverterConfig("inverter", inverter, "DD:EE:FF:11:22:33", "00000000000000000000000000000000", "Phoenix Inverter");
+    loadVictronInverterConfig("inverter", inverter, "DD:EE:FF:11:22:33", "00000000000000000000000000000000", "Phoenix Inverter 230V");
     
     loadDevice("ruuvi", ruuvi.cfg, "11:22:33:44:55:66", "Kylskåp Temp");
     loadDevice("mijia", mijia.cfg, "AA:BB:CC:DD:EE:FF", "Salong Temp");
