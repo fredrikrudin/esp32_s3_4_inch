@@ -55,10 +55,9 @@ struct XiaomiMijiaDevice {
     float battery_level;
 };
 
-// Shelly-struktur anpassad för Gen 2/Pro RPC (stöder upp till 2 kanaler)
 struct ShellyDevice {
     DeviceConfig cfg;
-    int total_channels;    // 1 för Pro 1, 2 för Pro 2
+    int total_channels;    
     bool channel_states[2]; // Sparar status för respektive reläkanal [0] och [1]
 };
 
@@ -93,6 +92,7 @@ extern ElegooRelaySystem elegoo;
 extern String wifi_ssid, wifi_pass;
 extern int update_interval;
 extern int display_brightness;
+extern int ui_style_version; // 1 = Klassisk v1, 2 = Nya cirkulära GUI-v2
 
 // ==========================================
 // 4. FREERTOS DELADE RESURSER & BUSSAR
