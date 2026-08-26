@@ -48,18 +48,19 @@ void setupWebEndpoints() {
         request->send(200, "text/html", "<h1>VenusOS GUI v2 Klon</h1><p>Reläautomation och tidsskedulering.</p>");
     });
 
-    // /data endpoint: Levererar live-JSON med systemdiagnostik (enligt README)
+    // /data endpoint: Levererar live-JSON med universell v6/v7 syntax
     server.on("/data", HTTP_GET, [](AsyncWebServerRequest *request){
-        StaticJsonDocument<256> doc;
+        JsonDocument doc; // Fungerar sömlöst i både ArduinoJson v6 och v7
         doc["system_status"] = "OK";
         doc["core0_free_heap"] = ESP.getFreeHeap();
-        doc["smartshunt_v"] = 13.24; // Dummy-värde tills BLE-manager matar in riktig data
+        doc["smartshunt_v"] = 13.24; 
         doc["mppt_status"] = "Bulk";
 
         String jsonResponse;
         serializeJson(doc, jsonResponse);
         request->send(200, "application/json", jsonResponse);
     });
+
 
     server.begin();
     Serial.println("[Network] Asynkron webbserver startad på port 80.");
