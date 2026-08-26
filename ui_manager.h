@@ -17,6 +17,10 @@ extern lv_obj_t *page_overview_container;
 extern lv_obj_t *discovery_popup;
 extern lv_obj_t *discovery_list;
 extern DeviceConfig *active_discovery_target;
+extern void create_environment_page(lv_obj_t *parent);
+extern void ui_update_environment_data();
+extern lv_obj_t *page_environment_container;
+
 
 struct UiEventContext { DeviceConfig *cfg; VictronDevice *victronDev; bool isKeyField; };
 struct ScanButtonContext { DeviceConfig *cfg; const char* typeFilter; };
