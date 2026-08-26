@@ -2,8 +2,30 @@
 #define CONFIG_H
 
 #include <Arduino.h>
+#include <Wire.h>
 #include <lvgl.h>
+#include <time.h> // För ESP32:s inbyggda klocka och tidszoner
 
+// ==========================================
+// 1. I2C- BUSS & HÅRDVARUKONFIGURATION
+// ==========================================
+// Intern buss: Waveshare Touch, Skärm och Bakgrundsbelysning (TCA9554)
+#define INTERNAL_SDA 8
+#define INTERNAL_SCL 9
+#define INTERNAL_I2C_FREQ 400000
+
+// Extern buss: Reläterminal på baksidan (PCF8574)
+#define EXTERNAL_SDA 15
+#define EXTERNAL_SCL 7
+#define EXTERNAL_I2C_FREQ 100000 
+const uint8_t RELAY_I2C_ADDRESS = 0x20;
+
+const int RELAY_4CH_PINS[] = {0, 1, 2, 3};
+const int RELAY_8CH_PINS[] = {0, 1, 2, 3, 4, 5, 6, 7};
+
+// ==========================================
+// 2. DATASTRUKTURER FÖR ENHETER & SENSORER
+// ==========================================
 // Gemensam struktur för enhetshantering på inställningssidan
 struct DeviceConfig {
     String mac_or_ip;  // MAC-adress för BLE, IP-adress för Shelly
@@ -42,10 +64,14 @@ struct ShellyDevice {
     bool channel_states[2]; // Sparar status för respektive reläkanal [0] och [1]
 };
 
-struct RelaySchedule { 
-    bool schedule_active; 
-    int on_hour; 
-    int off_hour; 
+// Uppgraderad flexibel struktur för Tid- och Datumschemaläggning (Victron-stil)
+struct RelaySchedule {
+    int startHour;      // Starttimme (0-23)
+    int startMinute;    // Startminut (0-59)
+    int endHour;        // Stopptimme (0-23)
+    int endMinute;      // Stoppminut (0-59)
+    bool days[7];       // Måndag [0] till Söndag. true = aktiv den dagen.
+    bool isEnabled;     // Är detta specifika schema aktiverat?
 };
 
 struct ElegooRelaySystem {
@@ -53,11 +79,13 @@ struct ElegooRelaySystem {
     bool relay8_states[8];
     bool enabled_4ch; 
     bool enabled_8ch;
-    RelaySchedule schedule4[4]; 
-    RelaySchedule schedule8[8];
+    RelaySchedule schedule4[4]; // Uppgraderad med nya tidsschemat ovan
+    RelaySchedule schedule8[8]; // Uppgraderad med nya tidsschemat ovan
 };
 
-// Globala inställningar och enhetsinstanser
+// ==========================================
+// 3. GLOBALA INSTANSER & SYSTEMVARIABLER
+// ==========================================
 extern VictronDevice shunt, mppt, ip22;
 extern RuuviTagDevice ruuvi;
 extern XiaomiMijiaDevice mijia;
@@ -68,14 +96,16 @@ extern String wifi_ssid, wifi_pass;
 extern int update_interval;
 extern int display_brightness;
 
-// Externa I2C-inställningar för det fysiska reläkortet (PCF8574)
-const uint8_t RELAY_I2C_ADDRESS = 0x20;
-const int I2C_SDA_PIN = 15;
-const int I2C_SCL_PIN = 7;
-const int RELAY_4CH_PINS[] = {0, 1, 2, 3};
-const int RELAY_8CH_PINS[] = {0, 1, 2, 3, 4, 5, 6, 7};
+// ==========================================
+// 4. FREERTOS DELADE RESURSER & BUSSAR
+// ==========================================
+extern SemaphoreHandle_t lvgl_mutex;
+extern TwoWire InternalI2C;
+extern TwoWire ExternalI2C;
 
-// Globala LVGL-objekt (Deklareras som extern här, allokeras i huvudskissen)
+// ==========================================
+// 5. GLOBALA LVGL-OBJEKT
+// ==========================================
 extern lv_obj_t * main_keyboard;
 extern lv_obj_t * lbl_footer_clock;
 extern lv_obj_t * btn_hamburger;
