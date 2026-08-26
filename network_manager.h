@@ -80,5 +80,48 @@ void updateNetworkData() {
         startWebServer();
     }
 }
+// Sätts i din AsyncWebServer-uppstart (t.ex. server.on)
+server.on("/api/schedule", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, 
+[](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    
+    // Använd ArduinoJson för att packa upp data från webbläsaren
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, data, len);
+    
+    if (!error) {
+        bool is8Channel = doc["is8ch"] | false;
+        int ch = doc["channel"] | 0;
+
+        if (is8Channel && ch >= 0 && ch < 8) {
+            elegoo.enabled_8ch = true;
+            elegoo.schedule8[ch].isEnabled = doc["enabled"];
+            elegoo.schedule8[ch].startHour = doc["startH"];
+            elegoo.schedule8[ch].startMinute = doc["startM"];
+            elegoo.schedule8[ch].endHour = doc["endH"];
+            elegoo.schedule8[ch].endMinute = doc["endM"];
+            JsonArray daysArray = doc["days"];
+            for(int i = 0; i < 7; i++) {
+                elegoo.schedule8[ch].days[i] = daysArray[i];
+            }
+        } 
+        else if (!is8Channel && ch >= 0 && ch < 4) {
+            elegoo.enabled_4ch = true;
+            elegoo.schedule4[ch].isEnabled = doc["enabled"];
+            elegoo.schedule4[ch].startHour = doc["startH"];
+            elegoo.schedule4[ch].startMinute = doc["startM"];
+            elegoo.schedule4[ch].endHour = doc["endH"];
+            elegoo.schedule4[ch].endMinute = doc["endM"];
+            JsonArray daysArray = doc["days"];
+            for(int i = 0; i < 7; i++) {
+                elegoo.schedule4[ch].days[i] = daysArray[i];
+            }
+        }
+
+        saveScheduleToNVS(); // Skriv direkt till flash-minnet via lagringsmodulen
+        request->send(200, "application/json", "{\"status\":\"success\"}");
+    } else {
+        request->send(400, "application/json", "{\"status\":\"json error\"}");
+    }
+});
 
 #endif // NETWORK_MANAGER_H
