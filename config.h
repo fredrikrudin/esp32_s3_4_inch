@@ -55,10 +55,11 @@ struct XiaomiMijiaDevice {
     float battery_level;
 };
 
+// Shelly-struktur anpassad för Gen 2/Pro RPC (stöder upp till 2 kanaler)
 struct ShellyDevice {
     DeviceConfig cfg;
-    int total_channels;    
-    bool channel_states[2]; 
+    int total_channels;    // 1 för Pro 1, 2 för Pro 2
+    bool channel_states[2]; // Sparar status för respektive reläkanal [0] och [1]
 };
 
 // Uppgraderad flexibel struktur för Tid- och Datumschemaläggning (Victron-stil)
@@ -67,7 +68,7 @@ struct RelaySchedule {
     int startMinute;    // Startminut (0-59)
     int endHour;        // Stopptimme (0-23)
     int endMinute;      // Stoppminut (0-59)
-    bool days[7];       // Måndag [0] till Söndag [6]. true = aktiv.
+    bool days[7];       // Måndag till Söndag. true = aktiv.
     bool isEnabled;     // Är detta schema aktiverat?
 };
 
