@@ -1,9 +1,10 @@
 #include "config.h"
 #include "ui_manager.h"
 #include "ble_manager.h"
+#include "storage_manager.h"
 #include "network_manager.h"
 #include "elegoo_relay_manager.h"
-#include "storage_manager.h"
+
 
 // Allokera globala variabler och I2C-bussar
 SemaphoreHandle_t lvgl_mutex = NULL;
