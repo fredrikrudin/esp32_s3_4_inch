@@ -1,104 +1,126 @@
 #ifndef NETWORK_MANAGER_H
 #define NETWORK_MANAGER_H
 
-#include <ESPAsyncWebServer.h>
-#include <ArduinoJson.h>
+#include <Arduino.h>
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h> // Kräver biblioteket ESPAsyncWebServer och AsyncTCP
 #include <HTTPClient.h>
-#include <Preferences.h>
 #include "config.h"
 
-extern Preferences prefs;
+// Initiera webbservern på standardport 80
+AsyncWebServer server(80);
 
-void setShellyState(bool turn_on) {
-    if (!shelly.enabled || WiFi.status() != WL_CONNECTED || shelly.ip == "") return;
+// Flagga för att hålla koll på om servern har startats
+bool isWebServerStarted = false;
+
+/**
+ * Genererar en realtids-JSON med all data från systemet.
+ * Denna endpoint nås via http://<esp32-ip>/data
+ */
+void handleJsonRequest(AsyncWebServerRequest *request) {
+    // Bygg upp en ren JSON-sträng manuellt för att spara RAM-minne (undviker fragmentation)
+    String json = "{";
+    
+    // 1. Systeminfo
+    json += "\"system\":{\"brightness\":" + String(display_brightness) + "},";
+    
+    // 2. Victron BLE-enheter
+    json += "\"victron\":{";
+    json += "\"shunt\":{\"name\":\"" + shunt.cfg.name + "\",\"v\":" + String(shunt.voltage) + ",\"a\":" + String(shunt.current) + ",\"soc\":" + String(shunt.soc) + ",\"p\":" + String(shunt.power) + ",\"en\":" + String(shunt.cfg.enabled) + "},";
+    json += "\"mppt\":{\"name\":\"" + mppt.cfg.name + "\",\"v\":" + String(mppt.voltage) + ",\"a\":" + String(mppt.current) + ",\"soc\":" + String(mppt.soc) + ",\"p\":" + String(mppt.power) + ",\"en\":" + String(mppt.cfg.enabled) + "},";
+    json += "\"ip22\":{\"name\":\"" + ip22.cfg.name + "\",\"v\":" + String(ip22.voltage) + ",\"a\":" + String(ip22.current) + ",\"soc\":" + String(ip22.soc) + ",\"p\":" + String(ip22.power) + ",\"en\":" + String(ip22.cfg.enabled) + "}";
+    json += "},";
+
+    // 3. Sensorer (Ruuvi & Xiaomi)
+    json += "\"sensors\":{";
+    json += "\"ruuvi\":{\"name\":\"" + ruuvi.cfg.name + "\",\"t\":" + String(ruuvi.temperature) + ",\"h\":" + String(ruuvi.humidity) + ",\"en\":" + String(ruuvi.cfg.enabled) + "},";
+    json += "\"xiaomi\":{\"name\":\"" + mijia.cfg.name + "\",\"t\":" + String(mijia.temperature) + ",\"h\":" + String(mijia.humidity) + ",\"bat\":" + String(mijia.battery_level) + ",\"en\":" + String(mijia.cfg.enabled) + "}";
+    json += "},";
+
+    // 4. Shelly Pro-reläer
+    json += "\"shelly\":{";
+    json += "\"pro1\":{\"name\":\"" + shellyPro1.cfg.name + "\",\"ip\":\"" + shellyPro1.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro1.channel_states[0]) + ",\"en\":" + String(shellyPro1.cfg.enabled) + "},";
+    json += "\"pro2\":{\"name\":\"" + shellyPro2.cfg.name + "\",\"ip\":\"" + shellyPro2.cfg.mac_or_ip + "\",\"ch0\":" + String(shellyPro2.channel_states[0]) + ",\"ch1\":" + String(shellyPro2.channel_states[1]) + ",\"en\":" + String(shellyPro2.cfg.enabled) + "}";
+    json += "}";
+    
+    json += "}";
+
+    // Skicka svaret som applikation/json
+    request->send(200, "application/json", json);
+}
+
+/**
+ * Startar webbserverns endpoints.
+ */
+void startWebServer() {
+    if (isWebServerStarted) return;
+
+    // Index-sida (enkel statusrapport)
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", "📊 VenusOS GUI v2 Klon - Servern är aktiv! Gå till /data för realtids-JSON.");
+    });
+
+    // JSON API-endpoint för din dator/mobil
+    server.on("/data", HTTP_GET, handleJsonRequest);
+
+    // Starta lyssnaren
+    server.begin();
+    isWebServerStarted = true;
+    Serial.println("[Network] Asynkron webbserver har startat på port 80!");
+}
+
+/**
+ * Initierar Wi-Fi-anslutningen asynkront.
+ */
+void initNetworkManager(String ssid, String pass) {
+    if (ssid == "" || ssid == "DITT_WIFI_SSID") {
+        Serial.println("[Network] Wi-Fi-konfiguration saknas (körs i offline-läge).");
+        return;
+    }
+    
+    WiFi.begin(ssid.c_str(), pass.c_str());
+    Serial.print("[Network] Ansluter till Wi-Fi: ");
+    Serial.println(ssid);
+}
+
+/**
+ * Skickar RPC-kommandon till Shelly Pro 1 & 2.
+ */
+void controlShellyProRelay(ShellyDevice &device, int channel, bool state) {
+    if (!device.cfg.enabled || device.cfg.mac_or_ip == "" || device.cfg.mac_or_ip == "0.0.0.0") return;
+    if (channel >= device.total_channels) return;
+
+    String url = "http://" + device.cfg.mac_or_ip + "/rpc/Switch.Set";
+    
     HTTPClient http;
-    http.begin("http://" + shelly.ip + "/rpc/Switch.Set?id=0&on=" + (turn_on ? "true" : "false"));
-    if (http.GET() > 0) shelly.current_status = turn_on;
+    http.begin(url);
+    http.addHeader("Content-Type", "application/json");
+    http.setTimeout(1500);
+
+    String jsonPayload = "{\"id\":" + String(channel) + ",\"on\":" + (state ? "true" : "false") + "}";
+    int httpResponseCode = http.POST(jsonPayload);
+    
+    if (httpResponseCode == 200) {
+        device.channel_states[channel] = state;
+        Serial.printf("[Shelly] RPC OK: %s (Ch%d -> %s)\n", device.cfg.mac_or_ip.c_str(), channel, state ? "ON" : "OFF");
+    } else {
+        Serial.printf("[Shelly] RPC Fel mot %s: %d\n", device.cfg.mac_or_ip.c_str(), httpResponseCode);
+    }
     http.end();
 }
 
-void setElegooRelayState(bool is_8ch, int ch, bool turn_on) {
-    if (is_8ch) {
-        if (!elegoo.enabled_8ch || ch < 0 || ch >= 8) return;
-        elegoo.relay8_states[ch] = turn_on; digitalWrite(RELAY_8CH_PINS[ch], turn_on ? LOW : HIGH);
-    } else {
-        if (!elegoo.enabled_4ch || ch < 0 || ch >= 4) return;
-        elegoo.relay4_states[ch] = turn_on; digitalWrite(RELAY_4CH_PINS[ch], turn_on ? LOW : HIGH);
+/**
+ * Håller koll på Wi-Fi-statusen och aktiverar servern vid lyckad anslutning.
+ */
+void updateNetworkData() {
+    // Om Wi-Fi precis anslöt, hämta IP och starta webbservern automatiskt
+    if (WiFi.status() == WL_CONNECTED && !isWebServerStarted) {
+        Serial.print("[Network] Wi-Fi Anslutet! IP-adress: ");
+        Serial.println(WiFi.localIP());
+        
+        // Starta webbservern nu när vi har ett nätverk
+        startWebServer();
     }
 }
 
-void processShellySchedule() {
-    if (!shelly.enabled || !shelly.schedule_active) return;
-    time_t now; struct tm ti; if (!getLocalTime(&ti)) return;
-    if (ti.tm_hour == shelly.on_hour && ti.tm_min == shelly.on_minute && !shelly.current_status) setShellyState(true);
-    if (ti.tm_hour == shelly.off_hour && ti.tm_min == shelly.off_minute && shelly.current_status) setShellyState(false);
-}
-
-void init_elegoo_relays() {
-    for (int i=0; i<4; i++) { pinMode(RELAY_4CH_PINS[i], OUTPUT); digitalWrite(RELAY_4CH_PINS[i], HIGH); }
-    for (int i=0; i<8; i++) { pinMode(RELAY_8CH_PINS[i], OUTPUT); digitalWrite(RELAY_8CH_PINS[i], HIGH); }
-}
-
-void processElegooSchedules() {
-    time_t now; struct tm ti; if (!getLocalTime(&ti)) return;
-    for(int i=0; i<4; i++) {
-        if (!elegoo.schedule4[i].schedule_active) continue;
-        if (ti.tm_hour == elegoo.schedule4[i].on_hour && !elegoo.relay4_states[i]) setElegooRelayState(false, i, true);
-        if (ti.tm_hour == elegoo.schedule4[i].off_hour && elegoo.relay4_states[i]) setElegooRelayState(false, i, false);
-    }
-}
-
-const char relays_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html><head><title>VenusOS v2 - Relays</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-    body { font-family: Arial, sans-serif; background-color: #0B0C0E; color: #fff; margin: 0; }
-    .status-bar { background: #000; padding: 12px; display: flex; align-items: center; color: #8A92A6; font-weight: bold; }
-    .container { padding: 20px; display: flex; flex-direction: column; align-items: center; }
-    .capsule { background: #181A1F; border: 1px solid #282C34; border-radius: 18px; padding: 15px; width: 100%; max-width: 420px; margin: 8px 0; }
-    .row { display: flex; justify-content: space-between; align-items: center; }
-    .switch { position: relative; display: inline-block; width: 46px; height: 22px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #353b45; transition: .3s; border-radius: 22px; }
-    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
-    input:checked + .slider { background-color: #2196F3; }
-    input:checked + .slider:before { transform: translateX(24px); }
-</style>
-</head><body>
-<div class="status-bar"><div>🎛️ Webbkontroll Panel (GUI v2)</div></div>
-<div class="container" id="relay-zone"></div>
-<script>
-    function remoteToggle(type, ch, state) { fetch(`/control_relay?type=${type}&ch=${ch}&state=${state ? 1 : 0}`); }
-    function syncEngine() {
-        fetch('/relay_status_json').then(res => res.json()).then(data => {
-            let zone = document.getElementById("relay-zone");
-            let html = `<div class='capsule'><div class='row'><span>Shelly Plus 1 (Wi-Fi)</span><label class='switch'><input type='checkbox' ${data.shl_on ? 'checked' : ''} onchange='remoteToggle("shelly", 99, this.checked)'><span class='slider'></span></label></div></div>`;
-            for(let i=0; i<4; i++) {
-                html += `<div class='capsule'><div class='row'><span>Elegoo Utgang ${i+1}</span><label class='switch'><input type='checkbox' ${data.r4[i] ? 'checked' : ''} onchange='remoteToggle("4ch", ${i}, this.checked)'><span class='slider'></span></label></div></div>`;
-            }
-            zone.innerHTML = html;
-        });
-    }
-    setInterval(syncEngine, 1000); window.onload = syncEngine;
-</script></body></html>
-)rawliteral";
-
-void register_relay_web_routes(AsyncWebServer &server) {
-    server.on("/relays", HTTP_GET, [](AsyncWebServerRequest *request){ request->send_200(relays_html, "text/html"); });
-    server.on("/relay_status_json", HTTP_GET, [](AsyncWebServerRequest *request){
-        DynamicJsonDocument doc(2048);
-        doc["shl_on"] = shelly.current_status; doc["shl_sch"] = shelly.schedule_active;
-        JsonArray r4_arr = doc.createNestedArray("r4");
-        for(int i=0; i<4; i++) { r4_arr.add(elegoo.relay4_states[i]); }
-        String out; serializeJson(doc, out); request->send(200, "application/json", out);
-    });
-    server.on("/control_relay", HTTP_GET, [](AsyncWebServerRequest *request){
-        if (request->hasParam("type") && request->hasParam("ch") && request->hasParam("state")) {
-            String type = request->getParam("type")->value(); int ch = request->getParam("ch")->value().toInt();
-            bool state = request->getParam("state")->value().toInt() == 1;
-            if (type == "shelly") setShellyState(state); if (type == "4ch") setElegooRelayState(false, ch, state);
-        }
-        request->send(200, "text/plain", "OK");
-    });
-}
-#endif
+#endif // NETWORK_MANAGER_H
