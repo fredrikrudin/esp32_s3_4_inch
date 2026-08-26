@@ -2,16 +2,6 @@
  * ============================================================================
  * 📊 VenusOS GUI v2 Klon för Waveshare ESP32-S3-Touch-LCD-4
  * ============================================================================
- * Fullständig huvudfil optimerad för stabilitet över alla kortrevisioner.
- * Innehåller fixar för Native USB, I2C-reläer samt automatisk v4-belysning.
- * 
- * Hårdvaruinställningar (Tools i Arduino IDE):
- * - Board: ESP32S3 Dev Module
- * - Flash Size: 16MB (128Mb)
- * - Partition Scheme: Huge APP (3MB No OTA/1MB SPIFFS)
- * - PSRAM: OPI PSRAM
- * - USB CDC On Boot: ENABLED 🟢 (Tvingande för att inte blockera USB-C)
- * ============================================================================
  */
 
 #include <Arduino.h>
@@ -19,122 +9,81 @@
 #include <lvgl.h>
 #include "config.h"
 
-// Inkludera alla dina modulhanterare
+// Inkludera alla hanterare
+#include "storage_manager.h"
 #include "ui_manager.h"
-#include "backlight_manager.h"   // Inkluderar det nya belysningssystemet
-#include "elegoo_relay_manager.h" // Inkluderar det nya I2C-reläsystemet
-#include "network_manager.h"
+#include "backlight_manager.h"
+#include "elegoo_relay_manager.h"
+#include "network_manager.h" // Innehåller den nya webbservern
 #include "ble_manager.h"
-#include "victron_manager.h"
-#include "ruuvi_manager.h"
-#include "xiaomi_manager.h"
-#include "system_diagnostics.h"
 
-// ----------------------------------------------------------------------------
-// 1. Definition av globala variabler (Deklarerade som 'extern' i config.h)
-// ----------------------------------------------------------------------------
+// Allokering av globala variabler
 VictronDevice shunt, mppt, ip22;
 EcoWorthyDevice ecoBatt;
 RuuviTagDevice ruuvi;
 XiaomiMijiaDevice mijia;
-ShellyDevice shelly;
-ElegooRelaySystem elegoo;
-DiscoveredDevice discoveryList;
-int discoveredCount = 0;
+ShellyDevice shellyPro1, shellyPro2;
 
-// Nätverks- och skärminställningar
+// Ditt lokala nätverk
 String wifi_ssid = "DITT_WIFI_SSID";
 String wifi_pass = "DITT_WIFI_LÖSENORD";
 int update_interval = 1000;
-int display_brightness = 127; // Globalt startvärde för ljusstyrka (0-255)
+int display_brightness = 127;
 
-// Tidshantering för schemaläggning (NTP/RTC)
 int currentHour = 12;
 int currentMinute = 0;
-
-// Tidtagare för asynkrona loopar (Ersätter blockerande delay)
 unsigned long lastNetworkUpdate = 0;
 unsigned long lastScheduleCheck = 0;
-unsigned long lastDiagUpdate = 0;
 
-// ----------------------------------------------------------------------------
-// 2. SETUP: Initieringssekvens (Körs en gång vid uppstart)
-// ----------------------------------------------------------------------------
 void setup() {
-    // Starta seriell loggning direkt. 
-    // Ingen "while(!Serial);" här eftersom kortet måste kunna boota utan dator!
     Serial.begin(115200);
-    delay(500); 
-    Serial.println("\n[SYSTEM] Startar VenusOS GUI v2 Klon...");
+    delay(500);
+    Serial.println("\n[SYSTEM] Initierar VenusOS Core...");
 
-    // Steg A: Initiera Waveshare LCD-skärmen, Touch och LVGL (v8.3)
-    // Detta sätter upp skärmens grundläggande hårdvaruregister.
-    Serial.println("[SYSTEM] Initierar display och LVGL-grafikmotor...");
+    // Ladda sparade namn och adresser från NVS Flash
+    loadAllSettings();
+
+    // Sätt upp Shelly-kanaler (Pro 1 har 1, Pro 2 har 2)
+    shellyPro1.total_channels = 1;
+    shellyPro2.total_channels = 2;
+
+    shunt.deviceType = 1; 
+    mppt.deviceType = 2;  
+    ip22.deviceType = 3;  
+
+    // Initiera skärm, touch och belysning (v1-v4 kompatibel)
     initDisplayAndUI(); 
-
-    // Steg B: Initiera bakgrundsbelysningen (Detekterar automatiskt v1-v3 eller v4)
-    // Denna funktion läser av den interna expandern och sätter startljusstyrkan.
-    Serial.println("[SYSTEM] Konfigurerar bakgrundsbelysning...");
     initBacklight();
 
-    // Steg C: Läs in reläkonfigurationen i systemminnet
-    elegoo.enabled_4ch = false; // Ändra till true om du kör det mindre kortet
-    elegoo.enabled_8ch = true;  // Ditt primära 8-kanals reläkort över I2C
-
-    // Steg D: Initiera det nya, säkra I2C-reläsystemet via PCF8574
-    // Öppnar I2C-anslutningen mot de externa stiften (GPIO 15 och 7)
+    // Initiera lokala I2C-reläer (PCF8574)
+    elegoo.enabled_8ch = true;
     initElegooRelays();
 
-    // Steg E: Starta trådlösa nätverkstjänster (Wi-Fi & Webbserver) asynkront
-    Serial.println("[SYSTEM] Startar nätverkshanterare och webbserver...");
+    // Starta Wi-Fi och BLE asynkront
     initNetworkManager(wifi_ssid, wifi_pass);
-
-    // Steg F: Starta passiv BLE-avläsning (SmartShunt, Ruuvi, Xiaomi)
-    Serial.println("[SYSTEM] Aktiverar bakgrundsskanning för Bluetooth-sensorer...");
     initBLEManager();
 
-    Serial.println("[SYSTEM] Systemstart slutförd! Huvudloopen är nu aktiv.");
+    Serial.println("[SYSTEM] Systemstart klar.");
 }
 
-// ----------------------------------------------------------------------------
-// 3. LOOP: Huvudloop (Körs kontinuerligt)
-// ----------------------------------------------------------------------------
 void loop() {
     unsigned long currentMillis = millis();
 
-    // Tvingande uppdatering: Hanterar touch-inmatning, animationer och LVGL-gränssnittet
+    // Kör LVGL-grafikmotor och touch-avkänning (Tvingande varje loopvarv)
     lv_timer_handler();
 
-    // Uppdatering A: Kontrollera reläscheman asynkront en gång i minuten (60000 ms)
+    // Kontrollera Wi-Fi-status och hantera webbserver/JSON-synk (Varje sekund)
+    if (currentMillis - lastNetworkUpdate >= (unsigned long)update_interval) {
+        lastNetworkUpdate = currentMillis;
+        updateNetworkData(); // Det är denna som tänder servern vid anslutning!
+    }
+
+    // Lokala reläscheman (En gång i minuten)
     if (currentMillis - lastScheduleCheck >= 60000) {
         lastScheduleCheck = currentMillis;
-        
-        // Här kan du lägga till kod för att uppdatera klockan från NTP/RTC innan kontroll:
-        // currentHour = getNetworkHour();
-        // currentMinute = getNetworkMinute();
-        
         updateRelaySchedules(currentHour, currentMinute);
     }
 
-    // Uppdatering B: Hantera JSON-synk, Shelly och Victron-data (Varje sekund)
-    if (currentMillis - lastNetworkUpdate >= (unsigned long)update_interval) {
-        lastNetworkUpdate = currentMillis;
-        
-        updateNetworkData();
-        updateVictronData();
-    }
-
-    // Uppdatering C: Systemdiagnostik och RAM-övervakning (Var 5:e sekund)
-    if (currentMillis - lastDiagUpdate >= 5000) {
-        lastDiagUpdate = currentMillis;
-        runSystemDiagnostics(); 
-    }
-
-    // ------------------------------------------------------------------------
-    // KRITISKT FÖR NATIVE USB-C: Systemets andningspaus
-    // ------------------------------------------------------------------------
-    // Denna korta paus på 5 ms är livsviktig för ESP32-S3. Den ger chippets 
-    // bakgrundskärna tid att köra USB CDC-drivrutinen. Detta förhindrar helt
-    // att datorn tappar COM-porten eller kastar USB-anslutningsfel.
+    // Kritiskt delay (5ms) för att ge Native USB-C tid att hålla kontakten stabil
     delay(5); 
 }
