@@ -13,14 +13,14 @@ void setExternalRelay(uint8_t relayPin, bool state) {
         currentRegisterState |= (1 << relayPin);  // HIGH = AV
     }
 
-    // Buss-optimering: Skriv endast till hårdvaran om tillståndet förändrats
+    // Skriv enbart till bussen vid faktiska förändringar
     if (currentRegisterState != previousState) {
         ExternalI2C.beginTransmission(RELAY_I2C_ADDRESS);
         ExternalI2C.write(currentRegisterState);
         
         uint8_t error = ExternalI2C.endTransmission();
         if (error != 0) {
-            Serial.printf("[Relä Fel] Det gick inte att nå PCF8574. Kod: %d\n", error);
+            Serial.printf("[Relä Fel] I2C-bussfel mot PCF8574. Kod: %d\n", error);
         }
     }
 }
