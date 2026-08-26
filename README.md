@@ -1,27 +1,40 @@
 # 📊 VenusOS GUI v2 Klon för Waveshare ESP32-S3
 
-Ett modulärt och högpresterande styrsystem i **Victron GUI v2-stil** utvecklat för **Waveshare ESP32-S3-Touch-LCD-4**. Systemet samlar in data trådlöst och styr reläer lokalt samt via Wi-Fi.
+Ett modernt GUI v2-styrsystem för **Waveshare ESP32-S3-Touch-LCD-4**. Systemet hanterar trådlös data (BLE/Victron) och styrsystem via en ny, stabilare arkitektur.
 
 ## ✨ Funktioner
-- **Mörkt GUI v2 Tema:** Minimalistiskt och modernt användargränssnitt byggt i LVGL (v8.3).
-- **Trådlös Data:** Passiv BLE-avläsning av Victron SmartShunt (AES-krypterad), RuuviTag och Xiaomi Mijia sensorer.
-- **Dubbel Reläkontroll:** Realtidsstyrning och schemaläggning av trådlösa Shelly Plus 1 samt lokala fysiska Elegoo (4/8-kanaliga) reläkort.
-- **Asynkront Webbgränssnitt:** Inbyggd webbserver med realtids JSON-synk mot din mobil/dator.
-- **Smarta Gester:** Dra vertikalt på touchskärmen för att tona in ett dolt ljusstyrkoreglage (PWM).
+* **GUI v2:** LVGL (v8.3) gränssnitt.
+* **Data:** BLE-avläsning (SmartShunt, Ruuvi, Xiaomi).
+* **Styrning:** Lokal I2C-relä och trådlösa Shelly Plus 1.
+* **v4-stöd:** Automatisk hantering av både äldre kort och nya v4-revisioner (TCA9554).
+* **Asynkront Webbgränssnitt:** JSON-synk.
 
-## 🖥️ Gränssnittsarkitektur (Bilder & Design)
-Nedan visas exempel på hur färgvalen och kapsel-layouterna i gränssnittet är strukturerade:
+---
 
-| Dashboard (Energiflöde) | Enhetskontroll (v2) | Statusrad (NTP) |
-|---|---|---|
-| ![Dashboard Layout](https://unsplash.com) | ![Kapsel Design](https://unsplash.com) | ![Statusrad](https://unsplash.com) |
+## 🔌 Fysisk I2C-inkoppling (PCF8574)
+Använd 3.5mm terminalen på baksidan för att styra reläer, vilket frigör RGB-pinnar.
 
-## 🚀 Kompileringsinställningar i Arduino IDE
-För att koden ska få plats i chippet, konfigurera **Tools**-menyn enligt följande:
-- **Board:** `ESP32S3 Dev Module`
-- **Flash Size:** `16MB (128Mb)`
-- **Partition Scheme:** `Huge APP (3MB No OTA/1MB SPIFFS)`
-- **PSRAM:** `OPI PSRAM`
+| Waveshare | PCF8574 Relä |
+| :--- | :--- |
+| **GND** | **GND** |
+| **5V/VCC** | **VCC** |
+| **SDA** (GPIO 15) | **SDA** |
+| **SCL** (GPIO 7) | **SCL** |
 
-## 👥 Bidra & Open-Source
-Detta projekt är helt Open-Source. Skapa gärna en *Pull Request* eller öppna en *Issue* om du vill lägga till stöd för fler hårdvarukällor!
+*Standardadress: `0x20` (A0-A2 på GND).*
+
+---
+
+## 🚀 Kompileringsinställningar
+**Viktigt i Arduino IDE för att undvika "bricked" port:**
+* **Flash Size:** 16MB
+* **Partition Scheme:** Huge APP
+* **PSRAM:** OPI PSRAM
+* **USB CDC On Boot:** **ENABLED** 🟢
+
+---
+
+## 🛠 Felsökning
+Om skärmen är svart eller USB-porten inte svarar:
+1. Håll **BOOT**, tryck **RST**, släpp **BOOT** för att tvinga in bootloader-läge.
+2. För Rev v4: Säkerställ att `ESP32_IO_Expander` är installerat för bakgrundsbelysning.
